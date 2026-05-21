@@ -1,0 +1,179 @@
+.todos-page {
+  width: min(1100px, calc(100% - 40px));
+  margin: 32px auto;
+  padding: 24px;
+}
+
+.todos-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 24px 80px rgba(8, 11, 27, 0.06);
+}
+
+.todos-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 28px;
+  flex-wrap: wrap;
+}
+
+.todos-label {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.todos-header h1 {
+  margin: 0;
+  font-size: clamp(2rem, 3vw, 2.7rem);
+  color: var(--text-h);
+}
+
+.todos-summary {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.todos-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.todos-form input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--text-h);
+  font-size: 16px;
+}
+
+.todos-form input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(170, 59, 255, 0.12);
+}
+
+.todos-add-button {
+  border: none;
+  border-radius: 16px;
+  padding: 16px 24px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.todos-add-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.todos-add-button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 28px rgba(170, 59, 255, 0.18);
+}
+
+.todos-error {
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: rgba(248, 113, 113, 0.12);
+  color: #b91c1c;
+  font-size: 15px;
+}
+
+.todos-empty {
+  padding: 36px;
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  color: var(--text-secondary);
+}
+
+.todos-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.todo-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: var(--card);
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.todo-item:hover {
+  border-color: var(--border);
+  transform: translateY(-1px);
+}
+
+.todo-item.completed {
+  opacity: 0.82;
+}
+
+.todo-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  font-size: 16px;
+  color: var(--text-h);
+}
+
+.todo-checkbox input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.todo-checkbox span {
+  word-break: break-word;
+}
+
+.todo-remove {
+  border: none;
+  background: transparent;
+  color: #ef4444;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px 14px;
+  border-radius: 12px;
+  transition: background 0.2s ease;
+}
+
+.todo-remove:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+@media (max-width: 720px) {
+  .todos-form {
+    grid-template-columns: 1fr;
+  }
+
+  .todos-add-button {
+    width: 100%;
+  }
+}

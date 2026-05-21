@@ -1,11 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { prisma } = require('../config/db');
 
 const router = express.Router();
 const usernameRateLimiter = require('../middleware/usernameRateLimiter')({ windowMs: 15 * 60 * 1000, max: 5 });
-
 
 router.post('/register', async (req, res) => {
     const { username, password } = req.body;
@@ -15,17 +14,20 @@ router.post('/register', async (req, res) => {
     }
 
     try {
-        let user = await User.findOne({ username });
-        if (user) {
+        const existingUser = await prisma.user.findUnique({ where: { username } });
+        if (existingUser) {
             return res.status(400).json({ message: 'User already exists' });
         }
 
-        user = new User({ username, password });
-
         const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, salt);
 
-        await user.save();
+        await prisma.user.create({
+            data: {
+                username,
+                password: hashedPassword,
+            },
+        });
 
         res.status(201).json({ message: 'User registered successfully' });
     } catch (err) {
@@ -34,12 +36,11 @@ router.post('/register', async (req, res) => {
     }
 });
 
-
 router.post('/login', usernameRateLimiter, async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const user = await User.findOne({ username });
+        const user = await prisma.user.findUnique({ where: { username } });
         if (!user) {
             return res.status(400).json({ message: 'Invalid credentials' });
         }

@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const connectDB = require('./config/db');
+const { connectDB, prisma } = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -43,12 +43,42 @@ app.get('/', (req, res) => {
     res.json({ message: 'Welcome to the File Upload API!' });
 });
 
+app.post('/api/test/prisma', async (req, res) => {
+    try {
+        const  username  = "nsbehjbwd";
+        
+        if (!username) {
+            return res.status(400).json({ status: 'error', message: 'Please provide a username in the request body' });
+        }
+
+        const newUser = await prisma.user.create({
+            data: { username: 'testuser123', password: 'testpassword123' }
+        });
+        
+        return res.json({ status: 'ok', user: newUser });
+    } catch (error) {
+        console.error('Prisma test failed:', error);
+        return res.status(500).json({ status: 'error', message: 'Prisma MongoDB test failed', error: error.message });
+    }
+});
+
 // Mount routers
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/todos', require('./routes/todos'));
 app.use('/', require('./routes/files')); // Contains /files, /upload, /download
 
 // --- 3. Start Server ---
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`Uploads will be stored in: ${UPLOAD_DIR}`);
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('\nGracefully shutting down...');
+    await prisma.$disconnect();
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
 });
