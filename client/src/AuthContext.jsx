@@ -150,6 +150,10 @@ export function AuthProvider({ children }) {
     if (accessToken) {
       headers['Authorization'] = `Bearer ${accessToken}`
     }
+    
+    if (refreshToken) {
+      headers['x-refresh-token'] = refreshToken
+    }
 
     const options = {
       ...init,

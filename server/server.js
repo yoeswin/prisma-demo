@@ -8,10 +8,9 @@ const { connectDB, prisma } = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://localhost:5180';
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = CLIENT_ORIGIN.split(',').map((origin) => origin.trim());
 
-// Connect to Database
 connectDB();
 
 // --- Global Middleware ---
@@ -24,29 +23,27 @@ app.use(cors({
         }
     },
     credentials: true,
+    exposedHeaders: ['x-access-token']
 }));
-app.use(express.json()); // To parse JSON bodies
+app.use(express.json());
 app.use(cookieParser());
 
 // --- Static Assets & Uploads Directory ---
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
-// Ensure upload directory exists on server start
 if (!fs.existsSync(UPLOAD_DIR)) {
     fs.mkdirSync(UPLOAD_DIR);
 }
-// Serve files from the uploads directory
 app.use('/uploads', express.static(UPLOAD_DIR));
 
-// --- 2. API Routes ---
-// Root/Health-check route
+
 app.get('/', (req, res) => {
     res.json({ message: 'Welcome to the File Upload API!' });
 });
 
 app.post('/api/test/prisma', async (req, res) => {
     try {
-        const  username  = "nsbehjbwd";
-        
+        const username = "nsbehjbwd";
+
         if (!username) {
             return res.status(400).json({ status: 'error', message: 'Please provide a username in the request body' });
         }
@@ -54,7 +51,7 @@ app.post('/api/test/prisma', async (req, res) => {
         const newUser = await prisma.user.create({
             data: { username: 'testuser123', password: 'testpassword123' }
         });
-        
+
         return res.json({ status: 'ok', user: newUser });
     } catch (error) {
         console.error('Prisma test failed:', error);
@@ -65,15 +62,13 @@ app.post('/api/test/prisma', async (req, res) => {
 // Mount routers
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/todos', require('./routes/todos'));
-app.use('/', require('./routes/files')); // Contains /files, /upload, /download
+app.use('/', require('./routes/files'));
 
-// --- 3. Start Server ---
 const server = app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`Uploads will be stored in: ${UPLOAD_DIR}`);
 });
 
-// Graceful shutdown
 process.on('SIGINT', async () => {
     console.log('\nGracefully shutting down...');
     await prisma.$disconnect();

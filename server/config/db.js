@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 const connectDB = async () => {
     try {
         await prisma.$connect();
-        console.log('MongoDB connected successfully via Prisma');
+        console.log('DB connected successfully via Prisma');
     } catch (error) {
         console.error('Database connection failed:', error);
         process.exit(1);
