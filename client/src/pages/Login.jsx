@@ -25,7 +25,7 @@ export default function Login() {
     const result = await login(username, password)
 
     if (result.success) {
-      navigate('/upload')
+      navigate('/todos')
     } else {
       setError(result.error)
     }

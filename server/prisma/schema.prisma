@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique
+  password  String
+
+  messages  Message[]
+
+  todos     Todo[]
+
+  ownedRooms Room[] @relation("RoomOwner")
+  memberOf   Room[] @relation("RoomMembers")
+  pendingIn  Room[] @relation("RoomPending")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Todo {
+  id        String   @id @default(uuid())
+
+  title     String
+  completed Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId    String
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+
+model Room {
+  id        String    @id @default(uuid()) // Or Int @id @default(autoincrement())
+  name      String    @unique
+  type      String    @default("open")
+  ownerId   String?
+  owner     User?     @relation("RoomOwner", fields: [ownerId], references: [id])
+  members   User[]    @relation("RoomMembers")
+  pending   User[]    @relation("RoomPending")
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  content   String
+  roomId    String
+  room      Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}

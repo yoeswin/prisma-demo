@@ -6,16 +6,13 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-// Define the upload directory path relative to the project root
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
-// Configure Multer for file storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, UPLOAD_DIR); // Save files to the 'uploads' directory
+        cb(null, UPLOAD_DIR); 
     },
     filename: function (req, file, cb) {
-        // Use a timestamp and the original extension to create a unique filename
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
     }
@@ -23,9 +20,6 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// @route   GET /files
-// @desc    Get a list of all uploaded files
-// @access  Public (can be protected by adding authMiddleware)
 router.get('/files', (req, res) => {
     fs.readdir(UPLOAD_DIR, (err, files) => {
         if (err) {
@@ -33,7 +27,6 @@ router.get('/files', (req, res) => {
             return res.status(500).json({ message: 'Internal Server Error' });
         }
 
-        // Map files to include URLs for accessing them
         const fileInfos = files.map(file => {
             return {
                 filename: file,
