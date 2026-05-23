@@ -15,7 +15,9 @@ export default function Chat() {
         if (!accessToken) return;
 
         const newSocket = io(API_BASE, {
-            auth: { token: accessToken }
+            auth: { token: accessToken },
+            forceNew: true,
+            transports: ['websocket']
         });
         setSocket(newSocket);
 

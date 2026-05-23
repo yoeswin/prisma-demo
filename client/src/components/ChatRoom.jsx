@@ -18,7 +18,7 @@ const ChatRoom = () => {
     const [pendingUsers, setPendingUsers] = useState([]);
     const [members, setMembers] = useState([]);
     const [roomOwnerId, setRoomOwnerId] = useState(null);
-    const [showMembers, setShowMembers] = useState(true);
+    const [showMembers, setShowMembers] = useState(false);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [roomType, setRoomType] = useState('open');
     const messagesEndRef = useRef(null);
@@ -88,7 +88,9 @@ const ChatRoom = () => {
         });
 
         const newSocket = io(API_BASE, {
-            auth: { token: accessToken }
+            auth: { token: accessToken },
+            forceNew: true,
+            transports: ['websocket']
         });
 
         setSocket(newSocket);
