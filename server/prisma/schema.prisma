@@ -44,7 +44,6 @@ model Room {
   id        String    @id @default(uuid()) // Or Int @id @default(autoincrement())
   name      String    @unique
   type      String    @default("open")
-  password  String?
   ownerId   String?
   owner     User?     @relation("RoomOwner", fields: [ownerId], references: [id])
   members   User[]    @relation("RoomMembers")

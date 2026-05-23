@@ -1,7 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const authMiddleware = require('../middleware/authMiddleware');
-const bcrypt = require('bcryptjs');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -31,30 +30,21 @@ router.get('/', async (req, res) => {
 
 // Create a new chat room
 router.post('/', async (req, res) => {
-    const { name, type, password } = req.body;
+    const { name, type } = req.body;
     
     if (!name) return res.status(400).json({ message: 'Room name is required' });
 
     try {
-        let hashedPassword = null;
-        if (type === 'password') {
-            if (!password) return res.status(400).json({ message: 'Password is required' });
-            hashedPassword = await bcrypt.hash(password, 10);
-        }
-
         const newRoom = await prisma.room.create({
             data: { 
                 name, 
                 type: type || 'open', 
-                password: hashedPassword,
                 ownerId: req.user.id,
                 members: { connect: { id: req.user.id } }
             },
         });
         
-        // Remove password from the returned object
-        const { password: _, ...roomSafe } = newRoom;
-        res.status(201).json(roomSafe);
+        res.status(201).json(newRoom);
     } catch (error) {
         if (error.code === 'P2002') {
             return res.status(400).json({ message: 'Room already exists' });
@@ -67,7 +57,6 @@ router.post('/', async (req, res) => {
 // Get messages for a specific room
 router.get('/:roomId/messages', async (req, res) => {
     const { roomId } = req.params;
-    const password = req.headers['x-room-password'];
 
     try {
         const room = await prisma.room.findUnique({ 
@@ -75,13 +64,6 @@ router.get('/:roomId/messages', async (req, res) => {
             include: { members: { select: { id: true } } }
         });
         if (!room) return res.status(404).json({ message: 'Room not found' });
-
-        if (room.type === 'password') {
-            if (!password) return res.status(401).json({ message: 'Password required to view messages' });
-            
-            const isMatch = await bcrypt.compare(password, room.password);
-            if (!isMatch) return res.status(401).json({ message: 'Incorrect password' });
-        }
 
         if (room.type === 'request') {
             const isMember = room.ownerId === req.user.id || room.members.some(m => m.id === req.user.id);
@@ -103,7 +85,6 @@ router.get('/:roomId/messages', async (req, res) => {
 // Get room members
 router.get('/:roomId/members', async (req, res) => {
     const { roomId } = req.params;
-    const password = req.headers['x-room-password'];
 
     try {
         const room = await prisma.room.findUnique({ 
@@ -113,41 +94,15 @@ router.get('/:roomId/members', async (req, res) => {
         
         if (!room) return res.status(404).json({ message: 'Room not found' });
 
-        if (room.type === 'password') {
-            if (!password) return res.status(401).json({ message: 'Password required to view members' });
-            
-            const isMatch = await bcrypt.compare(password, room.password);
-            if (!isMatch) return res.status(401).json({ message: 'Incorrect password' });
-        }
-
         if (room.type === 'request') {
             const isMember = room.ownerId === req.user.id || room.members.some(m => m.id === req.user.id);
             if (!isMember) return res.status(403).json({ message: 'Not authorized to view members' });
         }
 
-        res.json({ ownerId: room.ownerId, members: room.members });
+        res.json({ ownerId: room.ownerId, members: room.members, type: room.type });
     } catch (error) {
         console.error('Fetch members error:', error);
         res.status(500).json({ message: 'Failed to fetch members' });
-    }
-});
-
-// Verify Room Password
-router.post('/:roomId/verify', async (req, res) => {
-    const { roomId } = req.params;
-    const { password } = req.body;
-
-    try {
-        const room = await prisma.room.findUnique({ where: { id: roomId } });
-        if (!room) return res.status(404).json({ message: 'Room not found' });
-        if (room.type !== 'password') return res.json({ success: true });
-
-        const isMatch = await bcrypt.compare(password, room.password);
-        if (isMatch) res.json({ success: true });
-        else res.status(401).json({ message: 'Incorrect password' });
-    } catch (error) {
-        console.error('Verify password error:', error);
-        res.status(500).json({ message: 'Failed to verify password' });
     }
 });
 
@@ -254,6 +209,25 @@ router.post('/:roomId/reject', async (req, res) => {
     } catch (error) {
         console.error('Reject error:', error);
         res.status(500).json({ message: 'Failed to reject user' });
+    }
+});
+
+// Delete a room (Owner only)
+router.delete('/:roomId', async (req, res) => {
+    try {
+        const room = await prisma.room.findUnique({ where: { id: req.params.roomId } });
+        if (!room) return res.status(404).json({ message: 'Room not found' });
+        if (room.ownerId !== req.user.id) return res.status(403).json({ message: 'Not authorized to delete this room' });
+        
+        await prisma.room.delete({ where: { id: req.params.roomId } });
+
+        // Notify all users currently in the room
+        req.io.to(req.params.roomId).emit('roomDeleted');
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete room error:', error);
+        res.status(500).json({ message: 'Failed to delete room' });
     }
 });
 

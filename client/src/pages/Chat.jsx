@@ -26,7 +26,7 @@ export default function Chat() {
 
     return (
         <div className="chat-page" style={{ padding: '20px' }}>
-            <ChatRoomsList socket={socket} onSelectRoom={(roomId, password, isOwner) => navigate(`/chat/${roomId}`, { state: { password, isOwner } })} />
+            <ChatRoomsList socket={socket} onSelectRoom={(roomId, isOwner) => navigate(`/chat/${roomId}`, { state: { isOwner } })} />
         </div>
     );
 }

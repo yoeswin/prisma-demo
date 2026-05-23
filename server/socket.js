@@ -1,7 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
 
@@ -27,7 +26,11 @@ function setupSocket(server, userSocketMap) {
         try {
             const sockets = await io.in(roomId).fetchSockets();
             const remaining = excludeSocketId ? sockets.filter(s => s.id !== excludeSocketId) : sockets;
-            const onlineUsers = Array.from(new Map(remaining.map(s => [s.user.id, { id: s.user.id, username: s.user.username }])).values());
+            const onlineUsers = Array.from(new Map(remaining.map(s => {
+                // fetchSockets() returns RemoteSocket objects, custom data must be accessed via s.data
+                const user = s.data.user || s.user; 
+                return [user.id, { id: user.id, username: user.username }];
+            })).values());
             io.to(roomId).emit('onlineUsers', onlineUsers);
         } catch (err) {
             console.error('Error fetching sockets:', err);
@@ -41,10 +44,22 @@ function setupSocket(server, userSocketMap) {
             return next(new Error('Authentication error: No token provided'));
         }
 
-        jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+        jwt.verify(token, process.env.JWT_SECRET, async (err, decoded) => {
             if (err) return next(new Error('Authentication error: Invalid token'));
-            socket.user = decoded.user;
-            next();
+            
+            try {
+                const user = await prisma.user.findUnique({
+                    where: { id: decoded.user.id },
+                    select: { id: true, username: true }
+                });
+                if (!user) return next(new Error('Authentication error: User not found'));
+                socket.user = user;
+                socket.data.user = user; // Required for fetchSockets() to access the user object
+                next();
+            } catch (dbErr) {
+                console.error('Socket auth DB error:', dbErr);
+                next(new Error('Authentication error: Server error'));
+            }
         });
     });
 
@@ -69,7 +84,6 @@ function setupSocket(server, userSocketMap) {
 
         socket.on('joinRoom', async (payload) => {
             const roomId = typeof payload === 'object' ? payload.roomId : payload;
-            const password = typeof payload === 'object' ? payload.password : null;
 
             try {
                 const room = await prisma.room.findUnique({ 
@@ -78,16 +92,16 @@ function setupSocket(server, userSocketMap) {
                 });
                 if (!room) return socket.emit('error', { message: 'Room not found' });
 
-                if (room.type === 'password') {
-                    if (!password) return socket.emit('error', { message: 'Password required' });
-                    
-                    const isMatch = await bcrypt.compare(password, room.password);
-                    if (!isMatch) return socket.emit('error', { message: 'Incorrect Password' });
-                }
-
                 if (room.type === 'request') {
                     const isMember = room.ownerId === socket.user.id || room.members.some(m => m.id === socket.user.id);
                     if (!isMember) return socket.emit('error', { message: 'Not authorized to join this room' });
+                }
+
+                if (room.type !== 'open' && !room.members.some(m => m.id === socket.user.id)) {
+                    await prisma.room.update({
+                        where: { id: roomId },
+                        data: { members: { connect: { id: socket.user.id } } }
+                    });
                 }
 
                 socket.join(roomId);

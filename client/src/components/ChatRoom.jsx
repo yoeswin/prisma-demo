@@ -9,7 +9,6 @@ const ChatRoom = () => {
     const { roomId } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
-    const roomPassword = location.state?.password || null;
     const isOwner = location.state?.isOwner || false;
     const { authFetch, accessToken } = useAuth();
     const [socket, setSocket] = useState(null);
@@ -20,6 +19,7 @@ const ChatRoom = () => {
     const [roomOwnerId, setRoomOwnerId] = useState(null);
     const [showMembers, setShowMembers] = useState(true);
     const [onlineUsers, setOnlineUsers] = useState([]);
+    const [roomType, setRoomType] = useState('open');
     const messagesEndRef = useRef(null);
 
     const currentUserId = useMemo(() => {
@@ -42,12 +42,7 @@ const ChatRoom = () => {
             .catch(err => console.error("Failed to load pending users", err));
         }
 
-        const headers = {};
-        if (roomPassword) {
-            headers['x-room-password'] = roomPassword;
-        }
-
-        authFetch(`${API_BASE}/api/rooms/${roomId}/members`, { headers })
+        authFetch(`${API_BASE}/api/rooms/${roomId}/members`)
         .then(async res => {
             if (!res.ok) throw new Error('Failed to load members');
             return res.json();
@@ -55,10 +50,11 @@ const ChatRoom = () => {
         .then(data => {
             if (data.members) setMembers(data.members);
             if (data.ownerId) setRoomOwnerId(data.ownerId);
+            if (data.type) setRoomType(data.type);
         })
         .catch(err => console.error("Failed to load members:", err));
 
-        authFetch(`${API_BASE}/api/rooms/${roomId}/messages`, { headers })
+        authFetch(`${API_BASE}/api/rooms/${roomId}/messages`)
         .then(async res => {
             if (!res.ok) {
                 if (res.status === 401) throw new Error('Unauthorized');
@@ -83,7 +79,7 @@ const ChatRoom = () => {
         });
 
         setSocket(newSocket);
-        newSocket.emit('joinRoom', { roomId, password: roomPassword });
+        newSocket.emit('joinRoom', { roomId });
 
         newSocket.on('newMessage', (message) => {
             setMessages((prev) => [...prev, message]);
@@ -101,11 +97,28 @@ const ChatRoom = () => {
 
         newSocket.on('onlineUsers', (users) => {
             setOnlineUsers(users);
+            // Ensure anyone who joins dynamically is immediately added to the members UI
+            setMembers(prev => {
+                const updated = [...prev];
+                let changed = false;
+                users.forEach(u => {
+                    if (!updated.some(m => m.id === u.id)) {
+                        updated.push(u);
+                        changed = true;
+                    }
+                });
+                return changed ? updated : prev;
+            });
+        });
+
+        newSocket.on('roomDeleted', () => {
+            alert('This room has been deleted by the admin.');
+            navigate('/chat');
         });
 
         newSocket.on('error', (err) => {
             alert(err.message || 'An error occurred');
-            if (err.message.includes('Password') || err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
+            if (err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
                 navigate('/chat');
             }
         });
@@ -114,7 +127,7 @@ const ChatRoom = () => {
             newSocket.emit('leaveRoom', roomId);
             newSocket.disconnect();
         };
-    }, [roomId, accessToken, roomPassword, isOwner]);
+    }, [roomId, accessToken, isOwner]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -164,8 +177,27 @@ const ChatRoom = () => {
         <div className="chat-room-container" style={{ width: '100%', maxWidth: '1000px', margin: '20px auto', display: 'flex', flexDirection: 'column', height: '80vh', border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#fff', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#f8f9fa' }}>
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <button onClick={() => navigate('/chat')} style={{ marginRight: '15px', background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', color: '#007bff' }}>
-                        &larr; Back
+                    <button 
+                        onClick={() => navigate('/chat')} 
+                        style={{ 
+                            marginRight: '15px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            background: '#e9ecef', 
+                            border: '1px solid #ced4da', 
+                            padding: '6px 12px', 
+                            borderRadius: '6px', 
+                            cursor: 'pointer', 
+                            fontSize: '14px', 
+                            color: '#495057',
+                            fontWeight: '600',
+                            transition: 'all 0.2s ease'
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.backgroundColor = '#dee2e6'; e.currentTarget.style.color = '#212529'; }}
+                        onMouseOut={(e) => { e.currentTarget.style.backgroundColor = '#e9ecef'; e.currentTarget.style.color = '#495057'; }}
+                    >
+                        <span>&larr;</span> Rooms
                     </button>
                     <h3 style={{ margin: 0, color: '#333' }}>Chat Room</h3>
                 </div>
@@ -173,7 +205,7 @@ const ChatRoom = () => {
                     onClick={() => setShowMembers(!showMembers)}
                     style={{ background: 'none', border: '1px solid #007bff', color: '#007bff', borderRadius: '20px', padding: '6px 12px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
                 >
-                    {showMembers ? 'Hide Members' : `Members (${members.length})`}
+                    {showMembers ? 'Hide Members' : (roomType === 'open' ? `Online (${onlineUsers.length})` : `Members (${members.length})`)}
                 </button>
             </div>
             
@@ -237,10 +269,10 @@ const ChatRoom = () => {
                 {showMembers && (
                     <div style={{ width: '250px', borderLeft: '1px solid #e0e0e0', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #e0e0e0', fontWeight: 'bold', color: '#333', backgroundColor: '#fff' }}>
-                            Members ({members.length})
+                            {roomType === 'open' ? `Online (${onlineUsers.length})` : `Members (${members.length})`}
                         </div>
                         <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {members.map(m => {
+                            {(roomType === 'open' ? onlineUsers : members).map(m => {
                                 const isOnline = onlineUsers.some(u => u.id === m.id);
                                 return (
                                     <div key={m.id} style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>

@@ -8,7 +8,6 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
     const [rooms, setRooms] = useState([]);
     const [newRoomName, setNewRoomName] = useState('');
     const [roomType, setRoomType] = useState('open');
-    const [roomPassword, setRoomPassword] = useState('');
     const [error, setError] = useState(null);
 
     const currentUserId = useMemo(() => {
@@ -70,8 +69,7 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     name: newRoomName.trim(),
-                    type: roomType,
-                    password: roomType === 'password' ? roomPassword : null
+                    type: roomType
                 }),
             });
 
@@ -79,7 +77,6 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
                 const newRoom = await response.json();
                 setRooms([newRoom, ...rooms]); // Add the newly created room to the top
                 setNewRoomName('');
-                setRoomPassword('');
             } else {
                 const errorData = await response.json();
                 setError(errorData.message || 'Failed to create room');
@@ -93,25 +90,7 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
     const handleRoomClick = async (room) => {
         const isOwner = room.ownerId === currentUserId;
 
-        if (room.type === 'password') {
-            const pwd = prompt('This room is password protected. Enter password:');
-            if (pwd === null) return; // User cancelled
-            
-            try {
-                const response = await authFetch(`${API_BASE}/api/rooms/${room.id}/verify`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pwd })
-                });
-                if (!response.ok) {
-                    alert('Incorrect password!');
-                    return;
-                }
-            } catch (err) {
-                alert('Error verifying password');
-                return;
-            }
-        } else if (room.type === 'request') {
+        if (room.type === 'request') {
             const isMember = isOwner || room.members?.some(m => m.id === currentUserId);
             if (!isMember) {
                 const sendReq = window.confirm('You are not a member of this room. Send a request to join?');
@@ -127,7 +106,30 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
         }
         
         // Access granted, navigate to room
-        onSelectRoom(room.id, room.type === 'password' ? pwd : null, isOwner);
+        onSelectRoom(room.id, isOwner);
+    };
+
+    const handleDeleteRoom = async (e, roomId) => {
+        e.stopPropagation();
+        if (!window.confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await authFetch(`${API_BASE}/api/rooms/${roomId}`, {
+                method: 'DELETE'
+            });
+
+            if (response.ok) {
+                setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
+            } else {
+                const errorData = await response.json();
+                alert(errorData.message || 'Failed to delete room');
+            }
+        } catch (err) {
+            console.error('Error deleting room:', err);
+            alert('An unexpected error occurred while deleting the room');
+        }
     };
 
     return (
@@ -149,14 +151,10 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
                         style={{ padding: '10px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px', outline: 'none' }}
                     >
                         <option value="open">Open Room</option>
-                        <option value="password">Password Protected</option>
                         <option value="request">Request to Join</option>
                     </select>
                     <button type="submit" style={{ padding: '10px 20px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '16px', fontWeight: 'bold' }}>Create</button>
                 </div>
-                {roomType === 'password' && (
-                    <input type="password" placeholder="Set a password for this room..." value={roomPassword} onChange={e => setRoomPassword(e.target.value)} style={{ padding: '10px 15px', backgroundColor: '#2d2d2d', color: '#fff', border: '1px solid #444', borderRadius: '4px', fontSize: '16px' }} required />
-                )}
             </form>
             {error && <p style={{ color: '#dc3545', marginTop: '-20px', marginBottom: '20px' }}>{error}</p>}
 
@@ -181,12 +179,18 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <strong style={{ fontSize: '1.1em', color: '#4dabf7' }}># {room.name}</strong>
-                            {room.type === 'password' && <span title="Password Protected" style={{ fontSize: '1.2em' }}>🔒</span>}
                             {room.type === 'request' && <span title="Request to Join" style={{ fontSize: '1.2em' }}>🛡️</span>}
                         </div>
-                        <span style={{ fontSize: '0.85em', color: '#adb5bd' }}>
-                            Created: {new Date(room.createdAt).toLocaleDateString()}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                            <span style={{ fontSize: '0.85em', color: '#adb5bd' }}>
+                                Created: {new Date(room.createdAt).toLocaleDateString()}
+                            </span>
+                            {room.ownerId === currentUserId && (
+                                <button onClick={(e) => handleDeleteRoom(e, room.id)} style={{ padding: '6px 12px', backgroundColor: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
+                                    Delete
+                                </button>
+                            )}
+                        </div>
                     </li>
                 ))}
                 {rooms.length === 0 && <p style={{ textAlign: 'center', color: '#adb5bd', padding: '20px 0' }}>No rooms available. Create one to get started!</p>}
