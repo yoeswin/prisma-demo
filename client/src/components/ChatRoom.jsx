@@ -19,6 +19,7 @@ const ChatRoom = () => {
     const [members, setMembers] = useState([]);
     const [roomOwnerId, setRoomOwnerId] = useState(null);
     const [showMembers, setShowMembers] = useState(true);
+    const [onlineUsers, setOnlineUsers] = useState([]);
     const messagesEndRef = useRef(null);
 
     const currentUserId = useMemo(() => {
@@ -52,7 +53,7 @@ const ChatRoom = () => {
             return res.json();
         })
         .then(data => {
-            // We only use this endpoint to get the room owner id now, online members are handled via socket
+            if (data.members) setMembers(data.members);
             if (data.ownerId) setRoomOwnerId(data.ownerId);
         })
         .catch(err => console.error("Failed to load members:", err));
@@ -98,8 +99,8 @@ const ChatRoom = () => {
             }
         });
 
-        newSocket.on('onlineUsers', (onlineUsers) => {
-            setMembers(onlineUsers);
+        newSocket.on('onlineUsers', (users) => {
+            setOnlineUsers(users);
         });
 
         newSocket.on('error', (err) => {
@@ -135,6 +136,14 @@ const ChatRoom = () => {
                 body: JSON.stringify({ userId })
             });
             if (!res.ok) throw new Error('Failed to approve user');
+            
+            const approvedUser = pendingUsers.find(u => u.id === userId);
+            if (approvedUser) {
+                setMembers(prev => {
+                    if (prev.some(m => m.id === approvedUser.id)) return prev;
+                    return [...prev, approvedUser];
+                });
+            }
             setPendingUsers(prev => prev.filter(u => u.id !== userId));
         } catch(e) { console.error(e); alert('Error approving user'); }
     };
@@ -164,7 +173,7 @@ const ChatRoom = () => {
                     onClick={() => setShowMembers(!showMembers)}
                     style={{ background: 'none', border: '1px solid #007bff', color: '#007bff', borderRadius: '20px', padding: '6px 12px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
                 >
-                    {showMembers ? 'Hide Members' : `Online (${members.length})`}
+                    {showMembers ? 'Hide Members' : `Members (${members.length})`}
                 </button>
             </div>
             
@@ -228,20 +237,23 @@ const ChatRoom = () => {
                 {showMembers && (
                     <div style={{ width: '250px', borderLeft: '1px solid #e0e0e0', backgroundColor: '#fafafa', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #e0e0e0', fontWeight: 'bold', color: '#333', backgroundColor: '#fff' }}>
-                            Online ({members.length})
+                            Members ({members.length})
                         </div>
                         <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {members.map(m => (
-                                <div key={m.id} style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
-                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#28a745' }}></div>
-                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                        <span style={{ color: '#333', fontSize: '14px', fontWeight: m.id === currentUserId ? 'bold' : '500' }}>
-                                            {m.username} {m.id === currentUserId && <span style={{ fontWeight: 'normal', color: '#666' }}>(You)</span>}
-                                        </span>
-                                        {m.id === roomOwnerId && <span style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>Admin</span>}
+                            {members.map(m => {
+                                const isOnline = onlineUsers.some(u => u.id === m.id);
+                                return (
+                                    <div key={m.id} style={{ padding: '10px', borderRadius: '8px', backgroundColor: '#fff', border: '1px solid #e0e0e0', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: isOnline ? '#28a745' : '#ccc', transition: 'background-color 0.3s' }}></div>
+                                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                            <span style={{ color: '#333', fontSize: '14px', fontWeight: m.id === currentUserId ? 'bold' : '500' }}>
+                                                {m.username} {m.id === currentUserId && <span style={{ fontWeight: 'normal', color: '#666' }}>(You)</span>}
+                                            </span>
+                                            {m.id === roomOwnerId && <span style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>Admin</span>}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     </div>
                 )}
