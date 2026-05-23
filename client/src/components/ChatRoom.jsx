@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
+import Modal from './Modal';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -21,6 +22,7 @@ const ChatRoom = () => {
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [roomType, setRoomType] = useState('open');
     const messagesEndRef = useRef(null);
+    const [modalConfig, setModalConfig] = useState({ isOpen: false });
 
     const currentUserId = useMemo(() => {
         if (!accessToken) return null;
@@ -31,6 +33,16 @@ const ChatRoom = () => {
             return null;
         }
     }, [accessToken]);
+
+    const closeModal = () => setModalConfig({ isOpen: false });
+
+    const showAlert = (message, title = 'Alert', onConfirmAction = null) => {
+        setModalConfig({
+            isOpen: true, type: 'alert', title, message,
+            onConfirm: () => { closeModal(); if (onConfirmAction) onConfirmAction(); },
+            onClose: () => { closeModal(); if (onConfirmAction) onConfirmAction(); }
+        });
+    };
 
     useEffect(() => {
         if (isOwner) {
@@ -68,9 +80,10 @@ const ChatRoom = () => {
             console.error("Failed to load messages:", err);
             if (err.message === 'Unauthorized' || err.message === 'Forbidden') {
                 if (err.message === 'Forbidden') {
-                    alert('You are not authorized to view this room. Please request access from the lobby.');
+                    showAlert('You are not authorized to view this room. Please request access from the lobby.', 'Access Denied', () => navigate('/chat'));
+                } else {
+                    navigate('/chat');
                 }
-                navigate('/chat');
             }
         });
 
@@ -112,15 +125,15 @@ const ChatRoom = () => {
         });
 
         newSocket.on('roomDeleted', () => {
-            alert('This room has been deleted by the admin.');
-            navigate('/chat');
+            showAlert('This room has been deleted by the admin.', 'Room Deleted', () => navigate('/chat'));
         });
 
         newSocket.on('error', (err) => {
-            alert(err.message || 'An error occurred');
-            if (err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
-                navigate('/chat');
-            }
+            showAlert(err.message || 'An error occurred', 'Error', () => {
+                if (err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
+                    navigate('/chat');
+                }
+            });
         });
 
         return () => {
@@ -158,7 +171,7 @@ const ChatRoom = () => {
                 });
             }
             setPendingUsers(prev => prev.filter(u => u.id !== userId));
-        } catch(e) { console.error(e); alert('Error approving user'); }
+        } catch(e) { console.error(e); showAlert('Error approving user', 'Error'); }
     };
 
     const handleReject = async (userId) => {
@@ -170,7 +183,7 @@ const ChatRoom = () => {
             });
             if (!res.ok) throw new Error('Failed to reject user');
             setPendingUsers(prev => prev.filter(u => u.id !== userId));
-        } catch(e) { console.error(e); alert('Error rejecting user'); }
+        } catch(e) { console.error(e); showAlert('Error rejecting user', 'Error'); }
     };
 
     return (
@@ -290,6 +303,8 @@ const ChatRoom = () => {
                     </div>
                 )}
             </div>
+
+            <Modal {...modalConfig} />
         </div>
     );
 };

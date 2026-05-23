@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
+import Modal from './Modal';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -9,6 +10,7 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
     const [newRoomName, setNewRoomName] = useState('');
     const [roomType, setRoomType] = useState('open');
     const [error, setError] = useState(null);
+    const [modalConfig, setModalConfig] = useState({ isOpen: false });
 
     const currentUserId = useMemo(() => {
         if (!accessToken) return null;
@@ -16,13 +18,32 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
         catch (e) { return null; }
     }, [accessToken]);
 
+    const closeModal = () => setModalConfig({ isOpen: false });
+
+    const showAlert = (message, title = 'Alert') => {
+        setModalConfig({
+            isOpen: true, type: 'alert', title, message,
+            onConfirm: closeModal, onClose: closeModal
+        });
+    };
+
+    const showConfirm = (message, onConfirmAction, title = 'Confirm') => {
+        setModalConfig({
+            isOpen: true, type: 'confirm', title, message,
+            onConfirm: () => {
+                closeModal();
+                if (onConfirmAction) onConfirmAction();
+            }, onClose: closeModal
+        });
+    };
+
     useEffect(() => {
         fetchRooms();
 
         if (!socket) return;
 
         const handleApproval = ({ roomId, roomName, members }) => {
-            alert(`Your request to join "${roomName}" has been approved!`);
+            showAlert(`Your request to join "${roomName}" has been approved!`, 'Request Approved');
             // Update the room in the local state to grant access
             setRooms(prevRooms =>
                 prevRooms.map(room =>
@@ -32,7 +53,7 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
         };
 
         const handleRejection = ({ roomName }) => {
-            alert(`Your request to join "${roomName}" has been rejected.`);
+            showAlert(`Your request to join "${roomName}" has been rejected.`, 'Request Rejected');
         };
 
         socket.on('joinRequestApproved', handleApproval);
@@ -93,14 +114,13 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
         if (room.type === 'request') {
             const isMember = isOwner || room.members?.some(m => m.id === currentUserId);
             if (!isMember) {
-                const sendReq = window.confirm('You are not a member of this room. Send a request to join?');
-                if (sendReq) {
+                showConfirm('You are not a member of this room. Send a request to join?', async () => {
                     try {
                         const res = await authFetch(`${API_BASE}/api/rooms/${room.id}/request`, { method: 'POST' });
-                        if (res.ok) alert('Request sent! Waiting for admin approval.');
-                        else alert('Failed to send request. You may have already requested.');
+                        if (res.ok) showAlert('Request sent! Waiting for admin approval.', 'Success');
+                        else showAlert('Failed to send request. You may have already requested.', 'Error');
                     } catch (err) { console.error('Error sending request', err); }
-                }
+                }, 'Join Room');
                 return;
             }
         }
@@ -111,25 +131,23 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
 
     const handleDeleteRoom = async (e, roomId) => {
         e.stopPropagation();
-        if (!window.confirm('Are you sure you want to delete this room? This action cannot be undone.')) {
-            return;
-        }
+        showConfirm('Are you sure you want to delete this room? This action cannot be undone.', async () => {
+            try {
+                const response = await authFetch(`${API_BASE}/api/rooms/${roomId}`, {
+                    method: 'DELETE'
+                });
 
-        try {
-            const response = await authFetch(`${API_BASE}/api/rooms/${roomId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
-            } else {
-                const errorData = await response.json();
-                alert(errorData.message || 'Failed to delete room');
+                if (response.ok) {
+                    setRooms(prevRooms => prevRooms.filter(room => room.id !== roomId));
+                } else {
+                    const errorData = await response.json();
+                    showAlert(errorData.message || 'Failed to delete room', 'Error');
+                }
+            } catch (err) {
+                console.error('Error deleting room:', err);
+                showAlert('An unexpected error occurred while deleting the room', 'Error');
             }
-        } catch (err) {
-            console.error('Error deleting room:', err);
-            alert('An unexpected error occurred while deleting the room');
-        }
+        }, 'Delete Room');
     };
 
     return (
@@ -195,6 +213,8 @@ const ChatRoomsList = ({ onSelectRoom, socket }) => {
                 ))}
                 {rooms.length === 0 && <p style={{ textAlign: 'center', color: '#adb5bd', padding: '20px 0' }}>No rooms available. Create one to get started!</p>}
             </ul>
+
+            <Modal {...modalConfig} />
         </div>
     );
 };
