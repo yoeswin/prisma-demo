@@ -57,7 +57,7 @@ router.post('/login', usernameRateLimiter, async (req, res) => {
             return res.status(500).json({ message: 'Authentication configuration is missing on the server.' })
         }
 
-        const accessTokenExpiresIn = process.env.ACCESS_TOKEN_LIFETIME || '15m';
+        const accessTokenExpiresIn = process.env.ACCESS_TOKEN_LIFETIME || '15s';
         const refreshTokenExpiresIn = process.env.REFRESH_TOKEN_LIFETIME || '7d';
 
         const accessToken = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: accessTokenExpiresIn });

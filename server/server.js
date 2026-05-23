@@ -1,17 +1,23 @@
 require('dotenv').config(); // Load environment variables
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const { connectDB, prisma } = require('./config/db');
+const setupSocket = require('./socket');
 
 const app = express();
+const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = CLIENT_ORIGIN.split(',').map((origin) => origin.trim());
 
 connectDB();
+
+const userSocketMap = new Map(); // <userId, socketId>
+const io = setupSocket(server, userSocketMap);
 
 // --- Global Middleware ---
 app.use(cors({
@@ -25,6 +31,11 @@ app.use(cors({
     credentials: true,
     exposedHeaders: ['x-access-token']
 }));
+app.use((req, res, next) => {
+    req.io = io;
+    req.userSocketMap = userSocketMap;
+    next();
+});
 app.use(express.json());
 app.use(cookieParser());
 
@@ -62,9 +73,10 @@ app.post('/api/test/prisma', async (req, res) => {
 // Mount routers
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/todos', require('./routes/todos'));
+app.use('/api/rooms', require('./routes/rooms'));
 app.use('/', require('./routes/files'));
 
-const server = app.listen(PORT, () => {
+server.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
     console.log(`Uploads will be stored in: ${UPLOAD_DIR}`);
 });

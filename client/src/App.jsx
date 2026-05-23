@@ -6,6 +6,8 @@ import Login from './pages/Login'
 import Signup from './pages/Signup'
 import Upload from './pages/Upload'
 import Todos from './pages/Todos'
+import Chat from './pages/Chat'
+import ChatRoom from './components/ChatRoom'
 
 function App() {
   return (
@@ -28,6 +30,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Todos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat/:roomId"
+            element={
+              <ProtectedRoute>
+                <ChatRoom />
               </ProtectedRoute>
             }
           />

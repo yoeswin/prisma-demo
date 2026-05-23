@@ -20,6 +20,7 @@ export default function Header() {
       <nav className="site-nav">
         <Link to="/upload" className="nav-link">Upload</Link>
         <Link to="/todos" className="nav-link">Todos</Link>
+        <Link to="/chat" className="nav-link">Chat</Link>
         {!isAuthenticated ? (
           <>
             <Link to="/login" className="nav-link">Login</Link>
