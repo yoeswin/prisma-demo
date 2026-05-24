@@ -2,29 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ChatRoomsList from '../components/ChatRoomsList';
 import { useAuth } from '../AuthContext';
-import { io } from 'socket.io-client';
-
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { getSocket } from '../socketManager';
 
 export default function Chat() {
     const navigate = useNavigate();
     const { accessToken } = useAuth();
-    const [socket, setSocket] = useState(null);
-
-    useEffect(() => {
-        if (!accessToken) return;
-
-        const newSocket = io(API_BASE, {
-            auth: { token: accessToken },
-            forceNew: true,
-            transports: ['websocket']
-        });
-        setSocket(newSocket);
-
-        return () => {
-            newSocket.disconnect();
-        };
-    }, [accessToken]);
+    const socket = getSocket(accessToken);
 
     return (
         <div className="chat-page" style={{ padding: '20px' }}>
