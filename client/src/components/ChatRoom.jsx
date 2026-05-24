@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { io } from 'socket.io-client';
 import { useAuth } from '../AuthContext';
 import Modal from './Modal';
+import { getSocket } from '../socketManager';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -12,13 +12,13 @@ const ChatRoom = () => {
     const location = useLocation();
     const isOwner = location.state?.isOwner || false;
     const { authFetch, accessToken } = useAuth();
-    const [socket, setSocket] = useState(null);
+    const socket = getSocket(accessToken);
     const [messages, setMessages] = useState([]);
     const [input, setInput] = useState('');
     const [pendingUsers, setPendingUsers] = useState([]);
     const [members, setMembers] = useState([]);
     const [roomOwnerId, setRoomOwnerId] = useState(null);
-    const [showMembers, setShowMembers] = useState(true);
+    const [showMembers, setShowMembers] = useState(false);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [roomType, setRoomType] = useState('open');
     const messagesEndRef = useRef(null);
@@ -87,18 +87,15 @@ const ChatRoom = () => {
             }
         });
 
-        const newSocket = io(API_BASE, {
-            auth: { token: accessToken }
-        });
+        if (!socket) return;
 
-        setSocket(newSocket);
-        newSocket.emit('joinRoom', { roomId });
+        socket.emit('joinRoom', { roomId });
 
-        newSocket.on('newMessage', (message) => {
+        socket.on('newMessage', (message) => {
             setMessages((prev) => [...prev, message]);
         });
         
-        newSocket.on('newPendingRequest', (data) => {
+        socket.on('newPendingRequest', (data) => {
             if (isOwner && data.roomId === roomId) {
                 setPendingUsers(prev => {
                     // Avoid adding duplicates if the list is already up-to-date
@@ -108,7 +105,7 @@ const ChatRoom = () => {
             }
         });
 
-        newSocket.on('onlineUsers', (users) => {
+        socket.on('onlineUsers', (users) => {
             setOnlineUsers(users);
             // Ensure anyone who joins dynamically is immediately added to the members UI
             setMembers(prev => {
@@ -124,11 +121,11 @@ const ChatRoom = () => {
             });
         });
 
-        newSocket.on('roomDeleted', () => {
+        socket.on('roomDeleted', () => {
             showAlert('This room has been deleted by the admin.', 'Room Deleted', () => navigate('/chat'));
         });
 
-        newSocket.on('error', (err) => {
+        socket.on('error', (err) => {
             showAlert(err.message || 'An error occurred', 'Error', () => {
                 if (err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
                     navigate('/chat');
@@ -137,10 +134,14 @@ const ChatRoom = () => {
         });
 
         return () => {
-            newSocket.emit('leaveRoom', roomId);
-            newSocket.disconnect();
+            socket.emit('leaveRoom', roomId);
+            socket.off('newMessage');
+            socket.off('newPendingRequest');
+            socket.off('onlineUsers');
+            socket.off('roomDeleted');
+            socket.off('error');
         };
-    }, [roomId, accessToken, isOwner]);
+    }, [roomId, accessToken, isOwner, socket]);
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

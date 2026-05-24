@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
+import { disconnectSocket } from '../socketManager'
 import './header.css'
 
 export default function Header() {
@@ -7,6 +8,7 @@ export default function Header() {
   const navigate = useNavigate()
 
   const handleLogout = () => {
+    disconnectSocket()
     logout()
     navigate('/login')
   }

@@ -1,8 +1,6 @@
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient();
+const { prisma } = require('./config/db');
 
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = CLIENT_ORIGIN.split(',').map((origin) => origin.trim());
@@ -19,7 +17,8 @@ function setupSocket(server, userSocketMap) {
             },
             methods: ['GET', 'POST'],
             credentials: true
-        }
+        },
+        perMessageDeflate: false // Optimization: Disables compression for faster CPU processing of small chat messages
     });
 
     const emitOnlineUsers = async (roomId, excludeSocketId = null) => {
@@ -88,7 +87,7 @@ function setupSocket(server, userSocketMap) {
             try {
                 const room = await prisma.room.findUnique({ 
                     where: { id: roomId },
-                    include: { members: { select: { id: true } } }
+                    select: { id: true, type: true, ownerId: true, members: { select: { id: true } } }
                 });
                 if (!room) return socket.emit('error', { message: 'Room not found' });
 
