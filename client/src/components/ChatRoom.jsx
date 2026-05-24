@@ -4,7 +4,7 @@ import { useAuth } from '../AuthContext';
 import Modal from './Modal';
 import { getSocket } from '../socketManager';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3000` : 'http://localhost:3000');
 
 const ChatRoom = () => {
     const { roomId } = useParams();
@@ -91,11 +91,17 @@ const ChatRoom = () => {
 
         socket.emit('joinRoom', { roomId });
 
-        socket.on('newMessage', (message) => {
+        const handleConnect = () => {
+            socket.emit('joinRoom', { roomId });
+        };
+        socket.on('connect', handleConnect);
+
+        const handleNewMessage = (message) => {
             setMessages((prev) => [...prev, message]);
-        });
+        };
+        socket.on('newMessage', handleNewMessage);
         
-        socket.on('newPendingRequest', (data) => {
+        const handleNewPendingRequest = (data) => {
             if (isOwner && data.roomId === roomId) {
                 setPendingUsers(prev => {
                     // Avoid adding duplicates if the list is already up-to-date
@@ -103,9 +109,10 @@ const ChatRoom = () => {
                     return [...prev, data.user];
                 });
             }
-        });
+        };
+        socket.on('newPendingRequest', handleNewPendingRequest);
 
-        socket.on('onlineUsers', (users) => {
+        const handleOnlineUsers = (users) => {
             setOnlineUsers(users);
             // Ensure anyone who joins dynamically is immediately added to the members UI
             setMembers(prev => {
@@ -119,27 +126,31 @@ const ChatRoom = () => {
                 });
                 return changed ? updated : prev;
             });
-        });
+        };
+        socket.on('onlineUsers', handleOnlineUsers);
 
-        socket.on('roomDeleted', () => {
+        const handleRoomDeleted = () => {
             showAlert('This room has been deleted by the admin.', 'Room Deleted', () => navigate('/chat'));
-        });
+        };
+        socket.on('roomDeleted', handleRoomDeleted);
 
-        socket.on('error', (err) => {
+        const handleError = (err) => {
             showAlert(err.message || 'An error occurred', 'Error', () => {
                 if (err.message.includes('Unauthorized') || err.message.includes('Not authorized')) {
                     navigate('/chat');
                 }
             });
-        });
+        };
+        socket.on('error', handleError);
 
         return () => {
             socket.emit('leaveRoom', roomId);
-            socket.off('newMessage');
-            socket.off('newPendingRequest');
-            socket.off('onlineUsers');
-            socket.off('roomDeleted');
-            socket.off('error');
+            socket.off('connect', handleConnect);
+            socket.off('newMessage', handleNewMessage);
+            socket.off('newPendingRequest', handleNewPendingRequest);
+            socket.off('onlineUsers', handleOnlineUsers);
+            socket.off('roomDeleted', handleRoomDeleted);
+            socket.off('error', handleError);
         };
     }, [roomId, accessToken, isOwner, socket]);
 
@@ -150,7 +161,28 @@ const ChatRoom = () => {
     const sendMessage = (e) => {
         e.preventDefault();
         if (input.trim() && socket) {
-            socket.emit('sendMessage', { roomId, content: input });
+            const tempId = `temp-${Date.now()}`;
+            const optimisticMessage = {
+                id: tempId,
+                content: input,
+                userId: currentUserId,
+                user: { username: "You" },
+                createdAt: new Date().toISOString(),
+                isOptimistic: true
+            };
+            
+            // Instantly show the message on the screen (0ms latency!)
+            setMessages((prev) => [...prev, optimisticMessage]);
+            
+            socket.emit('sendMessage', { roomId, content: input }, (savedMessage) => {
+                if (savedMessage && savedMessage.error) {
+                    setMessages(prev => prev.filter(msg => msg.id !== tempId));
+                    showAlert(`Failed to send message: ${savedMessage.error}`, 'Error');
+                } else {
+                    // Swap the temporary optimistic message with the real one from the DB
+                    setMessages(prev => prev.map(msg => msg.id === tempId ? savedMessage : msg));
+                }
+            });
             setInput('');
         }
     };
@@ -252,7 +284,8 @@ const ChatRoom = () => {
                                     borderRadius: '15px', 
                                     borderBottomRightRadius: isMine ? 0 : '15px',
                                     borderBottomLeftRadius: isMine ? '15px' : 0, 
-                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)' 
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                    opacity: msg.isOptimistic ? 0.7 : 1
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '15px', marginBottom: '4px' }}>
                                         <span style={{ fontSize: '0.85em', color: isMine ? '#cce5ff' : '#666', fontWeight: 'bold' }}>
