@@ -9,7 +9,7 @@ export default function Todos() {
   const [loading, setLoading] = useState(true)
   const { authFetch } = useAuth()
 
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+  const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3000` : 'http://localhost:3000');
 
   useEffect(() => {
     fetchTodos()

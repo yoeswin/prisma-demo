@@ -27,9 +27,10 @@ function setupSocket(server, userSocketMap) {
             const remaining = excludeSocketId ? sockets.filter(s => s.id !== excludeSocketId) : sockets;
             const onlineUsers = Array.from(new Map(remaining.map(s => {
                 // fetchSockets() returns RemoteSocket objects, custom data must be accessed via s.data
-                const user = s.data.user || s.user; 
+                const user = s.data?.user || s.user; 
+                if (!user) return null;
                 return [user.id, { id: user.id, username: user.username }];
-            })).values());
+            }).filter(Boolean)).values());
             io.to(roomId).emit('onlineUsers', onlineUsers);
         } catch (err) {
             console.error('Error fetching sockets:', err);
@@ -84,16 +85,25 @@ function setupSocket(server, userSocketMap) {
         socket.on('joinRoom', async (payload) => {
             const roomId = typeof payload === 'object' ? payload.roomId : payload;
 
+            // Optimistically join the room channel to prevent dropped messages
+            socket.join(roomId);
+
             try {
                 const room = await prisma.room.findUnique({ 
                     where: { id: roomId },
                     select: { id: true, type: true, ownerId: true, members: { select: { id: true } } }
                 });
-                if (!room) return socket.emit('error', { message: 'Room not found' });
+                if (!room) {
+                    socket.leave(roomId);
+                    return socket.emit('error', { message: 'Room not found' });
+                }
 
                 if (room.type === 'request') {
                     const isMember = room.ownerId === socket.user.id || room.members.some(m => m.id === socket.user.id);
-                    if (!isMember) return socket.emit('error', { message: 'Not authorized to join this room' });
+                    if (!isMember) {
+                        socket.leave(roomId);
+                        return socket.emit('error', { message: 'Not authorized to join this room' });
+                    }
                 }
 
                 if (room.type !== 'open' && !room.members.some(m => m.id === socket.user.id)) {
@@ -103,10 +113,10 @@ function setupSocket(server, userSocketMap) {
                     });
                 }
 
-                socket.join(roomId);
                 emitOnlineUsers(roomId);
             } catch (err) {
                 console.error('Error joining room:', err);
+                socket.leave(roomId);
             }
         });
 
@@ -115,11 +125,12 @@ function setupSocket(server, userSocketMap) {
             emitOnlineUsers(roomId);
         });
 
-        socket.on('sendMessage', async (data) => {
+        socket.on('sendMessage', async (data, callback) => {
             const { roomId, content } = data;
             
             // Final Security Check: Ensure the user actually joined this room channel
             if (!socket.rooms.has(roomId)) {
+                if (callback) callback({ error: 'Unauthorized' });
                 return socket.emit('error', { message: 'Unauthorized: You must join the room first' });
             }
 
@@ -128,9 +139,13 @@ function setupSocket(server, userSocketMap) {
                     data: { content, roomId, userId: socket.user.id },
                     include: { user: { select: { username: true } } }
                 });
-                io.to(roomId).emit('newMessage', savedMessage);
+                
+                // Broadcast to everyone else, but NOT the sender (to avoid duplicates)
+                socket.to(roomId).emit('newMessage', savedMessage);
+                if (callback) callback(savedMessage);
             } catch (error) {
                 console.error('Error saving message:', error);
+                if (callback) callback({ error: 'Failed' });
                 socket.emit('error', { message: 'Failed to send message' });
             }
         });

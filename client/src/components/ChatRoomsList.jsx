@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../AuthContext';
 import Modal from './Modal';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' ? `http://${window.location.hostname}:3000` : 'http://localhost:3000');
 
 const ChatRoomsList = ({ onSelectRoom, socket }) => {
     const { authFetch, accessToken, user } = useAuth();
